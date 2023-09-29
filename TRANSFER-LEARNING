@@ -1,0 +1,75 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Carregar o modelo InceptionV3 pré-treinado com pesos treinados no ImageNet
+base_model = InceptionV3(weights='imagenet', include_top=False)
+
+# Congelar todas as camadas do modelo base (não treinar novamente)
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Adicionar camadas personalizadas para a classificação binária (gatos e cachorros)
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(1024, activation='relu')(x)
+predictions = Dense(2, activation='softmax')(x)
+
+# Criar o modelo final
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# Compilar o modelo
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+
+
+# Criar geradores de dados para treinamento e validação
+train_datagen = ImageDataGenerator(
+    rescale=1.0/255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# Definir o número correto de classes (2: gatos e cachorros)
+num_classes = 2
+
+train_generator = train_datagen.flow_from_directory(
+    '/content/dataset/treinamento',
+    target_size=(299, 299),
+    batch_size=32,
+    class_mode='categorical',
+    classes=['gatos', 'cachorros'],  # Lista de nomes de classe
+    shuffle=True  # Embaralhar os dados de treinamento
+)
+
+validation_generator = test_datagen.flow_from_directory(
+    '/content/dataset/validação',
+    target_size=(299, 299),
+    batch_size=32,
+    class_mode='categorical',
+    classes=['gatos', 'cachorros'],  # Lista de nomes de classe
+    shuffle=False  # Não é necessário embaralhar os dados de validação
+)
+
+# Treinar o modelo
+model.fit(
+    train_generator,
+    steps_per_epoch=len(train_generator),
+    epochs=10,
+    validation_data=validation_generator,
+    validation_steps=len(validation_generator)
+)
+
+# Salvar o modelo treinado
+model.save('modelo_gatos_cachorros_inceptionv3.h5')
